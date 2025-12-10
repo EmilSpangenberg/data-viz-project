@@ -145,6 +145,30 @@ app.layout = html.Div([
                             )
                         ], style={"marginBottom": "0.5rem"}),
 
+                        html.Div([
+                            html.Label("Compare Year (optional):"),
+                            dcc.Dropdown(
+                                id="compare_year_dropdown",
+                                clearable=True,
+                            )
+                        ], style={"marginBottom": "0.5rem"}),
+
+                        html.Div([
+                            html.Label("Flip Start Year:"),
+                            dcc.Dropdown(
+                                id="flip_start_year",
+                                clearable=False,
+                            )
+                        ], style={"marginBottom": "0.5rem"}),
+
+                        html.Div([
+                            html.Label("Flip End Year:"),
+                            dcc.Dropdown(
+                                id="flip_end_year",
+                                clearable=False,
+                            )
+                        ], style={"marginBottom": "0.5rem"}),
+
                         html.Div(id='coverage_info', style={"marginTop": "0.5rem", "fontWeight": "600"}),
                     ])
                 ])
@@ -225,6 +249,27 @@ app.layout = html.Div([
                             ])
                         ])
                     ])
+                ]),
+
+                # Flip map + ranked bar
+                html.Div(className="row g-4 gy-4 mt-3", children=[
+                    html.Div(className="col-md-7", children=[
+                        html.Div(className="card mb-4", children=[
+                            html.Div(className="card-body py-3", children=[
+                                html.H6("Cumulative Flip Map", className="card-title"),
+                                dcc.Graph(id="flip_map", style={"height": "520px"})
+                            ])
+                        ])
+                    ]),
+
+                    html.Div(className="col-md-5", children=[
+                        html.Div(className="card mb-4", children=[
+                            html.Div(className="card-body py-3", children=[
+                                html.H6("States Ranked by Flips", className="card-title"),
+                                dcc.Graph(id="flip_bar", style={"height": "520px"})
+                            ])
+                        ])
+                    ])
                 ])
             ])
         ])
@@ -236,14 +281,24 @@ app.layout = html.Div([
 @app.callback(
     Output("year_dropdown", "options"),
     Output("year_dropdown", "value"),
+    Output("compare_year_dropdown", "options"),
+    Output("compare_year_dropdown", "value"),
+    Output("flip_start_year", "options"),
+    Output("flip_start_year", "value"),
+    Output("flip_end_year", "options"),
+    Output("flip_end_year", "value"),
     Input("dataset_selector", "value")
 )
 def update_year_options(dataset):
     df = df_president if dataset == "president" else df_senate
     years = sorted(df["year"].unique())
     default = max(years) if len(years) else None
+    # set compare default to the previous available year if possible
+    compare_default = years[-2] if len(years) >= 2 else None
+    start_default = years[0] if len(years) else None
+    end_default = years[-1] if len(years) else None
     options = [{"label": y, "value": y} for y in years]
-    return options, default
+    return options, default, options, compare_default, options, start_default, options, end_default
 
 
 @app.callback(
@@ -312,10 +367,15 @@ def update_line_chart(dataset, selected_year):
 @app.callback(
     Output("map_chart", "figure"),
     Input("dataset_selector", "value"),
-    Input("year_dropdown", "value")
+    Input("year_dropdown", "value"),
+    Input("compare_year_dropdown", "value")
 )
-def update_map_chart(dataset, selected_year):
+def update_map_chart(dataset, selected_year, compare_year):
     df = df_president if dataset == "president" else df_senate
+    # if compare_year provided and different from selected_year, show flip/swing map
+    if compare_year and selected_year and compare_year != selected_year:
+        from graphs.map_chart import create_flip_map
+        return create_flip_map(df, selected_year, compare_year)
     return create_map_chart(df, selected_year)
 
 
@@ -327,6 +387,50 @@ def update_map_chart(dataset, selected_year):
 def update_pie_chart(dataset, selected_year):
     df = df_president if dataset == "president" else df_senate
     return create_pie_chart(df, selected_year)
+
+
+@app.callback(
+    Output('flip_map', 'figure'),
+    Output('flip_bar', 'figure'),
+    Input('dataset_selector', 'value'),
+    Input('flip_start_year', 'value'),
+    Input('flip_end_year', 'value')
+)
+def update_flip_views(dataset, start_year, end_year):
+    # For the Senate dataset, flips across consecutive elections are not meaningful
+    # because only ~1/3 of seats are contested each cycle (6-year terms). Show
+    # an explanatory placeholder and disable flip calculations.
+    if dataset == 'senate':
+        # create simple placeholder figures without importing heavy modules
+        from plotly import graph_objs as go
+        fig_note = go.Figure()
+        fig_note.add_annotation(text="Flip visualization not applicable for the Senate (staggered 6-year terms).",
+                                x=0.5, y=0.5, xref='paper', yref='paper', showarrow=False,
+                                font=dict(size=14, color="#444"))
+        fig_note.update_layout(title='Cumulative Flip Map', template='plotly_white')
+
+        fig_bar = go.Figure()
+        fig_bar.add_annotation(text="No flip data for Senate — see explanation.", x=0.5, y=0.5,
+                               xref='paper', yref='paper', showarrow=False,
+                               font=dict(size=12, color="#444"))
+        fig_bar.update_layout(title='States Ranked by Flips', template='plotly_white')
+        return fig_note, fig_bar
+
+    df = df_president if dataset == 'president' else df_senate
+    from graphs.flip_chart import create_flip_choropleth, create_flip_bar
+    # defensive: if start/end missing, pass None so functions pick defaults
+    return create_flip_choropleth(df, start_year, end_year), create_flip_bar(df, start_year, end_year)
+
+
+@app.callback(
+    Output('flip_start_year', 'disabled'),
+    Output('flip_end_year', 'disabled'),
+    Input('dataset_selector', 'value')
+)
+def disable_flip_controls(dataset):
+    # Disable flip range controls for Senate because flips across consecutive cycles are not meaningful
+    disabled = True if dataset == 'senate' else False
+    return disabled, disabled
 
 
 # --- Run server ---

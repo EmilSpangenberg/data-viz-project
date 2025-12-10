@@ -73,3 +73,83 @@ def create_map_chart(df, selected_year):
         title=f"Winning Party by State ({selected_year})"
     )
     return fig
+
+
+def create_flip_map(df, year_a, year_b):
+    """Create a map showing states that flipped between year_a and year_b.
+
+    Categories:
+    - Stayed Democrat
+    - Stayed Republican
+    - Flipped to Democrat
+    - Flipped to Republican
+    - No Race
+    """
+    # winners for each year
+    def winners_for_year(dframe, year):
+        dfy = dframe[dframe['year'] == year]
+        group_col = 'state' if 'state' in dfy.columns else ('state_po' if 'state_po' in dfy.columns else None)
+        if group_col is None:
+            raise ValueError('No state column found for flip map')
+        idx = dfy.groupby(group_col)['candidatevotes'].idxmax()
+        w = dfy.loc[idx].copy()
+        if 'state_po' not in w.columns and 'state' in w.columns:
+            w['state_po'] = w['state']
+        return w[['state_po', 'party_simplified']].drop_duplicates(subset=['state_po']).set_index('state_po')
+
+    w_a = winners_for_year(df, year_a)
+    w_b = winners_for_year(df, year_b)
+
+    # display states = union of display list and any states present in winners
+    display_states = get_display_states(df)
+    # ensure we include any postal codes present in data even if not in canonical list
+    extra = set(w_a.index.tolist()) | set(w_b.index.tolist())
+    for s in extra:
+        if s and s not in display_states:
+            display_states.append(s)
+
+    all_df = pd.DataFrame({'state_po': display_states}).set_index('state_po')
+
+    merged = all_df.join(w_a.rename(columns={'party_simplified': 'party_a'}))
+    merged = merged.join(w_b.rename(columns={'party_simplified': 'party_b'}))
+
+    def classify(row):
+        a = row.get('party_a')
+        b = row.get('party_b')
+        if pd.isna(a) and pd.isna(b):
+            return 'No Race'
+        if pd.isna(a) and not pd.isna(b):
+            return f'Flipped to {b}' if False else 'No Race'
+        if not pd.isna(a) and pd.isna(b):
+            return 'No Race'
+        if a == b:
+            return f'Stayed {a}'
+        # both present and different -> flipped to b
+        return f'Flipped to {b}'
+
+    merged['status'] = merged.apply(classify, axis=1)
+
+    # map statuses to colors
+    color_map = {
+        'Stayed Democrat': 'blue',
+        'Stayed Republican': 'red',
+        'Flipped to Democrat': 'purple',
+        'Flipped to Republican': 'orange',
+        'No Race': 'lightgray'
+    }
+
+    category_order = [
+        'Stayed Democrat', 'Stayed Republican', 'Flipped to Democrat', 'Flipped to Republican', 'No Race'
+    ]
+
+    fig = px.choropleth(
+        merged.reset_index(),
+        locations='state_po',
+        locationmode='USA-states',
+        color='status',
+        category_orders={'status': category_order},
+        color_discrete_map=color_map,
+        scope='usa',
+        title=f'State Changes: {year_a} → {year_b}'
+    )
+    return fig
