@@ -1,0 +1,6 @@
+shiny>=1.0.0
+shinywidgets>=0.3.2
+pandas>=2.0.0
+plotly>=5.18.0
+htmltools>=0.5.0
+starlette>=0.37.0

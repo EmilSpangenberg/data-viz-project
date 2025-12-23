@@ -103,5 +103,5 @@ def create_flip_bar(df, start_year=None, end_year=None, top_n=15):
     counts = counts.reset_index().rename(columns={'index': 'state_po'})
     counts = counts.sort_values('flip_count', ascending=False).head(top_n)
     fig = px.bar(counts, x='flip_count', y='state_po', orientation='h', title='States Ranked by Flip Count')
-    fig.update_layout(yaxis={'categoryorder':'total ascending'})
+    fig.update_layout(yaxis={'categoryorder': 'total ascending'})
     return fig
