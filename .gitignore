@@ -4,3 +4,4 @@ __pycache__
 .env
 .venv
 scripts
+data_visualization_report.pdf

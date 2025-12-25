@@ -114,7 +114,7 @@ app_ui = ui.page_fluid(
         # Controls section at the top (dataset only)
         ui.row(
             ui.column(
-                12,
+                6,
                 ui.div(
                     {"class": "card mb-4"},
                     ui.div(
@@ -129,6 +129,20 @@ app_ui = ui.page_fluid(
                                 selected="president",
                                 inline=True,
                             ),
+                        ),
+                    ),
+                ),
+            ),
+            ui.column(
+                6,
+                ui.div(
+                    {"class": "card mb-4"},
+                    ui.div(
+                        {"class": "card-body py-3 d-flex justify-content-end align-items-center"},
+                        ui.download_button(
+                            "download_report",
+                            "Download Manual / Report",
+                            class_="btn btn-primary"
                         ),
                     ),
                 ),
@@ -451,6 +465,21 @@ def server(input, output, session):
         if ds != 'president':
             return
         session.send_input_message("flip_range", {"disabled": False})
+
+    @output
+    @render.download(filename="DV_US_Elections_Dashboard_Report.pdf")
+    def download_report():
+        """Download handler for the report PDF."""
+        import os
+        report_path = os.path.join(os.path.dirname(__file__), "data_visualization_report.pdf")
+        if os.path.exists(report_path):
+            with open(report_path, "rb") as f:
+                yield f.read()
+        else:
+            # If report.pdf doesn't exist, create a placeholder message
+            from io import BytesIO
+            placeholder = b"Report PDF not found. Please place your report.pdf file in the project root directory."
+            yield placeholder
 
 
 app = App(app_ui, server)
