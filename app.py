@@ -8,6 +8,7 @@ from graphs.map_chart import create_map_chart, get_display_states
 from graphs.pie_chart import create_pie_chart
 from graphs.state_split_chart import create_state_split_chart
 from graphs.boxplot_chart import create_boxplot_by_party
+from graphs.turnout_chart import create_turnout_explorer
 
 
 def _load_and_prepare(path: str) -> pd.DataFrame:
@@ -267,6 +268,19 @@ app_ui = ui.page_fluid(
                 ),
             ),
         ),
+        ui.row(
+            ui.column(
+                12,
+                ui.div(
+                    {"class": "card mb-4"},
+                    ui.div(
+                        {"class": "card-body py-3"},
+                        ui.tags.h6("Interactive Turnout Explorer", {"class": "card-title"}),
+                        output_widget("turnout_explorer", height="520px")
+                    ),
+                ),
+            ),
+        ),
         # Flip analysis grouped section (map + ranked bar + slider + description)
         ui.output_ui("flip_card"),
     ),
@@ -373,6 +387,12 @@ def server(input, output, session):
         selected_year = int(input.pie_year())
         df = current_df()
         return create_pie_chart(df, selected_year)
+
+    @output
+    @render_plotly
+    def turnout_explorer():
+        df = current_df()
+        return create_turnout_explorer(df)
 
     @output
     @render_plotly
