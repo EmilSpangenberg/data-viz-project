@@ -102,7 +102,70 @@ def _find_state_col(df: pd.DataFrame) -> str | None:
 # --- UI ---
 app_ui = ui.page_fluid(
     ui.tags.head(
-        ui.tags.link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/bootswatch@5.2.3/dist/flatly/bootstrap.min.css")
+        ui.tags.link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/bootswatch@5.2.3/dist/flatly/bootstrap.min.css"),
+        ui.tags.style(
+            ".js-plotly-plot, .plotly { width: 100% !important; }\n"
+            "#turnout_explorer { width: 100% !important; }\n"
+            "#turnout_explorer .js-plotly-plot, #turnout_explorer .plotly { width: 100% !important; }\n"
+            ".card .card-body .js-plotly-plot, .card .card-body .plotly { width: 100% !important; }\n"
+            "#map_animation_slider_container { display: none; }\n"
+            "#map_static_controls_container { display: block; }\n"
+            "input[id='map_animated']:checked ~ * #map_animation_slider_container { display: block !important; }\n"
+            "input[id='map_animated']:checked ~ * #map_static_controls_container { display: none !important; }\n"
+            "/* Prevent flash during chart updates */\n"
+            "#map_chart { transition: opacity 0.3s ease-in-out; }\n"
+            ".plotly .plot-container { transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1) !important; }\n"
+        ),
+        ui.tags.script(
+            "document.addEventListener('DOMContentLoaded', function() {\n"
+            "  function toggleMapControls() {\n"
+            "    const checkbox = document.getElementById('map_animated');\n"
+            "    const animSlider = document.getElementById('map_animation_slider_container');\n"
+            "    const staticControls = document.getElementById('map_static_controls_container');\n"
+            "    if (checkbox && animSlider && staticControls) {\n"
+            "      if (checkbox.checked) {\n"
+            "        animSlider.style.display = 'block';\n"
+            "        staticControls.style.display = 'none';\n"
+            "      } else {\n"
+            "        animSlider.style.display = 'none';\n"
+            "        staticControls.style.display = 'block';\n"
+            "      }\n"
+            "    }\n"
+            "  }\n"
+            "  setTimeout(function() {\n"
+            "    const checkbox = document.getElementById('map_animated');\n"
+            "    if (checkbox) {\n"
+            "      checkbox.addEventListener('change', toggleMapControls);\n"
+            "      toggleMapControls();\n"
+            "    }\n"
+            "  }, 100);\n"
+            "  \n"
+            "  // Smooth Plotly updates - prevent flash\n"
+            "  const observer = new MutationObserver(function(mutations) {\n"
+            "    mutations.forEach(function(mutation) {\n"
+            "      if (mutation.type === 'childList') {\n"
+            "        const mapDiv = document.getElementById('map_chart');\n"
+            "        if (mapDiv && mapDiv.querySelector('.plotly')) {\n"
+            "          const plotlyDiv = mapDiv.querySelector('.js-plotly-plot');\n"
+            "          if (plotlyDiv && plotlyDiv.data) {\n"
+            "            // Use Plotly.react instead of full redraw when possible\n"
+            "            if (window.lastMapData) {\n"
+            "              plotlyDiv.style.opacity = '1';\n"
+            "            }\n"
+            "          }\n"
+            "        }\n"
+            "      }\n"
+            "    });\n"
+            "  });\n"
+            "  \n"
+            "  setTimeout(function() {\n"
+            "    const mapContainer = document.getElementById('map_chart');\n"
+            "    if (mapContainer) {\n"
+            "      observer.observe(mapContainer, { childList: true, subtree: true });\n"
+            "    }\n"
+            "  }, 500);\n"
+            "});"
+        )
     ),
 
     ui.tags.nav(
@@ -221,25 +284,49 @@ app_ui = ui.page_fluid(
                             ui.column(
                                 6,
                                 ui.div(
-                                    {"style": "margin-bottom: 0.5rem;"},
-                                    ui.tags.label("Select Year:"),
-                                    ui.input_select("map_year", None, {str(max(president_years)): str(max(president_years))}, selected=str(max(president_years)))
+                                    {"style": "margin-bottom: 0.75rem;"},
+                                    ui.input_checkbox("map_animated", "Show as animated timeline", False)
                                 )
                             ),
                             ui.column(
                                 6,
                                 ui.div(
-                                    {"style": "margin-bottom: 0.5rem;"},
-                                    ui.tags.label("Compare Year (optional):"),
-                                    ui.input_select("map_compare_year", None, {"": "(None)"}, selected=""),
-                                    ui.tags.small(
-                                        "Select a second year to highlight states that flipped between the selected year and the compare year. Leave empty to show a single-year map.",
-                                        {"style": "display:block; color:#666; margin-top: 4px;"}
+                                    {"style": "margin-bottom: 0.75rem;"},
+                                    ui.input_checkbox("map_show_flips", "Show state flips (compared to previous election)", False)
+                                )
+                            )
+                        ),
+                        ui.div(
+                            {"id": "map_animation_slider_container"},
+                            ui.output_ui("map_animation_slider")
+                        ),
+                        ui.div(
+                            {"id": "map_static_controls_container"},
+                            ui.row(
+                                ui.column(
+                                    6,
+                                    ui.div(
+                                        {"style": "margin-bottom: 0.5rem;"},
+                                        ui.tags.label("Select Year:"),
+                                        ui.input_select("map_year", None, {"2020": "2020"}, selected="2020")
+                                    )
+                                ),
+                                ui.column(
+                                    6,
+                                    ui.div(
+                                        {"style": "margin-bottom: 0.5rem;"},
+                                        ui.tags.label("Compare Year (optional):"),
+                                        ui.input_select("map_compare_year", None, {"": "(None)"}, selected=""),
+                                        ui.tags.small(
+                                            "Select a second year to highlight states that flipped.",
+                                            {"style": "display:block; color:#666; margin-top: 4px;"}
+                                        )
                                     )
                                 )
                             )
                         ),
-                        output_widget("map_chart", height="520px"),
+                        ui.output_ui("map_animation_help"),
+                        output_widget("map_chart", height="600px"),
                         ui.div(
                             {"class": "mt-2"},
                             ui.tags.span(style="display: inline-block; width: 14px; height: 14px; background-color: blue; margin-right: 6px; border-radius: 2px; vertical-align: middle;"),
@@ -268,6 +355,9 @@ app_ui = ui.page_fluid(
                 ),
             ),
         ),
+
+        # Flip analysis grouped section (map + ranked bar + slider + description)
+        ui.output_ui("flip_card"),
         ui.row(
             ui.column(
                 12,
@@ -276,13 +366,11 @@ app_ui = ui.page_fluid(
                     ui.div(
                         {"class": "card-body py-3"},
                         ui.tags.h6("Interactive Turnout Explorer", {"class": "card-title"}),
-                        output_widget("turnout_explorer", height="520px")
+                        ui.div({"class": "w-100", "style": "width:100%;"}, output_widget("turnout_explorer", height="520px"))
                     ),
                 ),
             ),
         ),
-        # Flip analysis grouped section (map + ranked bar + slider + description)
-        ui.output_ui("flip_card"),
     ),
 )
 
@@ -304,7 +392,7 @@ def server(input, output, session):
         # Update per-graph selects
         ui.update_select("bar_year", choices=choices, selected=str(max(years)) if years else None)
         ui.update_select("map_year", choices=choices, selected=str(max(years)) if years else None)
-        compare_choices = {"": "(None)"}
+        compare_choices = {""  : "(None)"}
         compare_choices.update(choices)
         compare_default = str(years[-2]) if len(years) >= 2 else ""
         ui.update_select("map_compare_year", choices=compare_choices, selected=compare_default)
@@ -322,9 +410,57 @@ def server(input, output, session):
 
     @output
     @render.ui
+    def map_animation_slider():
+        """Show animation slider when in animation mode."""
+        if input.map_animated():
+            years = current_years()
+            return ui.div(
+                ui.input_slider(
+                    "map_animation_year",
+                    "Year:",
+                    min=int(min(years)),
+                    max=int(max(years)),
+                    value=int(min(years)),
+                    step=4,
+                    animate={"interval": 2500, "loop": True}
+                )
+            )
+        return ui.div({"style": "display: none;"})
+
+    @reactive.Effect
+    @reactive.event(input.map_animated)
+    def _toggle_map_controls():
+        """Update map controls when animation mode changes."""
+        if not input.map_animated():
+            # Update the year selectors when switching back to static mode
+            years = current_years()
+            choices = {str(y): str(y) for y in years}
+            ui.update_select("map_year", choices=choices, selected=str(max(years)))
+            compare_choices = {"" : "(None)"}
+            compare_choices.update(choices)
+            compare_default = str(years[-2]) if len(years) >= 2 else ""
+            ui.update_select("map_compare_year", choices=compare_choices, selected=compare_default)
+
+    @output
+    @render.ui
+    def map_animation_help():
+        """Show animation instructions when in animation mode."""
+        if input.map_animated():
+            return ui.div(
+                ui.tags.p(
+                    "Use the play button on the slider or drag it manually to see how states shifted over time.",
+                    {"class": "text-muted", "style": "font-size: 0.85rem; margin-bottom: 0.5rem; margin-top: -0.5rem;"}
+                )
+            )
+        return ""
+
+    @output
+    @render.ui
     def no_race_count():
         if input.dataset_selector() != 'senate':
             return ""
+        if input.map_animated():
+            return ""  # No single-year count in animated mode
         if not input.map_year():
             return ""
         selected_year = int(input.map_year())
@@ -366,17 +502,36 @@ def server(input, output, session):
     @output
     @render_plotly
     def map_chart():
-        if not input.map_year():
-            from plotly import graph_objs as go
-            return go.Figure()
-        selected_year = int(input.map_year())
         df = current_df()
-        if input.map_compare_year() and input.map_compare_year() != "":
-            compare_year = int(input.map_compare_year())
-            if compare_year != selected_year:
-                from graphs.map_chart import create_flip_map
-                return create_flip_map(df, selected_year, compare_year)
-        return create_map_chart(df, selected_year)
+        show_flips = input.map_show_flips()
+        
+        if input.map_animated():
+            selected_year = int(input.map_animation_year())
+            return create_map_chart(df, selected_year=selected_year, animated=False, show_flips=show_flips)
+        else:
+            # Check if map_year input exists and has a value
+            try:
+                year_val = input.map_year()
+                if not year_val:
+                    from plotly import graph_objs as go
+                    return go.Figure()
+                selected_year = int(year_val)
+                
+                # Check for compare year
+                try:
+                    compare_val = input.map_compare_year()
+                    if compare_val and compare_val != "":
+                        compare_year = int(compare_val)
+                        if compare_year != selected_year:
+                            from graphs.map_chart import create_flip_map
+                            return create_flip_map(df, selected_year, compare_year)
+                except:
+                    pass
+                    
+                return create_map_chart(df, selected_year=selected_year, animated=False, show_flips=show_flips)
+            except:
+                from plotly import graph_objs as go
+                return go.Figure()
 
     @output
     @render_plotly

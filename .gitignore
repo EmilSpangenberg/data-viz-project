@@ -5,3 +5,4 @@ __pycache__
 .venv
 scripts
 data_visualization_report.pdf
+rsconnect-python

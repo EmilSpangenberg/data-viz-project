@@ -30,10 +30,30 @@ def get_display_states(df):
 ALL_STATES = get_display_states
 
 
-def create_map_chart(df, selected_year):
+def create_map_chart(df, selected_year, animated=False, show_flips=False):
+    """Create a choropleth map showing winning party by state.
+    
+    Args:
+        df: DataFrame with election data
+        selected_year: Year to display
+        animated: Kept for compatibility (no longer used)
+        show_flips: If True, show flip status compared to previous election
+    """
+    if show_flips:
+        # Get previous election year (4 years earlier)
+        years = sorted(df['year'].unique())
+        current_idx = years.index(selected_year)
+        if current_idx == 0:
+            # First year, show regular map
+            show_flips = False
+        else:
+            previous_year = years[current_idx - 1]
+            return create_flip_map(df, previous_year, selected_year)
+    
+    # Show single year
     df_year = df[df["year"] == selected_year]
 
-    # choose a column to group by for winners (prefer `state`, but fallback to `state_po`)
+    # choose a column to group by for winners
     group_col = 'state' if 'state' in df_year.columns else ('state_po' if 'state_po' in df_year.columns else None)
     if group_col is None:
         raise ValueError('No state column found for map chart')
@@ -42,9 +62,8 @@ def create_map_chart(df, selected_year):
     winners_idx = df_year.groupby(group_col)["candidatevotes"].idxmax()
     winners = df_year.loc[winners_idx].copy()
 
-    # ensure we have a `state_po` column for mapping; if not, try to map from `state`
+    # ensure we have a `state_po` column for mapping
     if 'state_po' not in winners.columns and 'state' in winners.columns:
-        # assume state contains postal codes in that case
         winners['state_po'] = winners['state']
 
     # determine which states to show on the map (dynamic)
@@ -72,6 +91,41 @@ def create_map_chart(df, selected_year):
         scope="usa",
         title=f"Winning Party by State ({selected_year})"
     )
+    
+    # Add smooth transitions optimized for animation
+    fig.update_layout(
+        transition={
+            'duration': 800,
+            'easing': 'cubic-in-out',
+            'ordering': 'traces first'
+        },
+        uirevision='constant',  # Prevents resetting zoom/pan
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        # Disable modebar to reduce flashing
+        modebar={'bgcolor': 'rgba(255,255,255,0)', 'color': 'rgba(0,0,0,0.3)'}
+    )
+    
+    # Optimize trace updates for smooth color transitions
+    fig.update_traces(
+        marker_line_width=0.5,
+        marker_line_color='white',
+        # Pre-configure transitions at trace level
+        marker={
+            'line': {'width': 0.5, 'color': 'white'}
+        }
+    )
+    
+    # Configure to minimize re-renders
+    fig.update_geos(
+        visible=True,
+        showland=True,
+        landcolor='rgb(243, 243, 243)',
+        showcountries=False,
+        showlakes=True,
+        lakecolor='rgb(255, 255, 255)'
+    )
+    
     return fig
 
 

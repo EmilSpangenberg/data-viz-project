@@ -55,7 +55,8 @@ def create_turnout_explorer(df: pd.DataFrame) -> go.Figure:
         yaxis_title="Total votes",
         legend_title="State",
         template="plotly_white",
-        margin=dict(t=60, b=40, l=60, r=20),
+        margin=dict(t=60, b=40, l=20, r=10),
         height=520,
+        autosize=True,
     )
     return fig
